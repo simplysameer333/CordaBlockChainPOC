@@ -270,10 +270,9 @@ public class AgreementNegotiationApi {
             QueryCriteria customCriteria = new QueryCriteria.VaultCustomQueryCriteria(uniqueAttributeEXpression,
                     Vault.StateStatus.CONSUMED);
 
-            Set<Class<AgreementNegotiationState>> contractStateTypes = new HashSet
-                    (Collections.singletonList(AgreementNegotiationState.class));
 
-           QueryCriteria vaultCriteria = new QueryCriteria.VaultQueryCriteria(Vault.StateStatus.UNCONSUMED, contractStateTypes);
+           QueryCriteria vaultCriteria = new QueryCriteria.VaultCustomQueryCriteria(uniqueAttributeEXpression,
+                   Vault.StateStatus.UNCONSUMED);
 
             Vault.Page<AgreementNegotiationState> results = rpcOps.vaultQueryByCriteria(vaultCriteria, AgreementNegotiationState.class);
             Vault.Page<AgreementNegotiationState> results1 = rpcOps.vaultQueryByCriteria(customCriteria, AgreementNegotiationState.class);

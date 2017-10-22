@@ -57,6 +57,10 @@ public class AgreementNegotiationState implements LinearState, QueryableState {
         this.linearId = new UniqueIdentifier();
     }
 
+    public AgreementNegotiationState(UniqueIdentifier linearId) {
+        this.linearId = linearId;
+    }
+
     @Override public UniqueIdentifier getLinearId() {
         return linearId;
     }

@@ -2,17 +2,26 @@ package com.genpact.agreementnegotiation.flow;
 
 import co.paralleluniverse.fibers.Suspendable;
 import com.genpact.agreementnegotiation.contract.AgreementNegotiationContract;
+import com.genpact.agreementnegotiation.schema.AgreementNegotiationSchema;
 import com.genpact.agreementnegotiation.state.AgreementNegotiationState;
 import com.google.common.collect.ImmutableList;
 import net.corda.core.contracts.Command;
 import net.corda.core.contracts.ContractState;
 import net.corda.core.contracts.StateAndContract;
+import net.corda.core.contracts.StateAndRef;
 import net.corda.core.flows.*;
 import net.corda.core.identity.Party;
+import net.corda.core.node.services.Vault;
+import net.corda.core.node.services.vault.Builder;
+import net.corda.core.node.services.vault.CriteriaExpression;
+import net.corda.core.node.services.vault.QueryCriteria;
 import net.corda.core.transactions.SignedTransaction;
 import net.corda.core.transactions.TransactionBuilder;
 import net.corda.core.utilities.ProgressTracker;
+import net.corda.core.utilities.ProgressTracker.Step;
 
+
+import java.lang.reflect.Field;
 import java.security.PublicKey;
 import java.util.Date;
 import java.util.List;
@@ -29,31 +38,47 @@ public class AgreementNegotiationAgreeFlow {
     @InitiatingFlow
     @StartableByRPC
     public static class Initiator extends FlowLogic<SignedTransaction> {
-       // private final AgreementNegotiationParams agreementParams;
-
         private final Party otherParty;
-        private String agrementName = null;
-        private Date agrementInitiationDate = null;
-        private Date agrementLastAmendDate = null;
-        private Date agrementAgreedDate = null;
-        private Double agreementValue = null;
-        private String collateral = null;
 
         /**
          * The progress tracker provides checkpoints indicating the progress of the flow to observers.
          */
-        private final ProgressTracker progressTracker = new ProgressTracker();
-        public Initiator(String name, Date initialDate, Double value, String collateral, Party otherParty) {
-
-            this.agrementName = name;
-            this.agrementInitiationDate = initialDate;
-            this.agrementLastAmendDate = null;
-            this.agrementAgreedDate = null;
-            this.agreementValue= value;
-            this.collateral=collateral;
-
+        private static final Step ID_OTHER_NODES = new Step("Identifying other nodes on the network.");
+        private static final Step SENDING_AND_RECEIVING_DATA = new Step("Sending data between parties.");
+        private static final Step EXTRACTING_VAULT_STATES = new Step("Extracting states from the vault.");
+        private static final Step OTHER_TX_COMPONENTS = new Step("Gathering a transaction's other components.");
+        private static final Step TX_BUILDING = new Step("Building a transaction.");
+        private static final Step TX_SIGNING = new Step("Signing a transaction.");
+        private static final Step TX_VERIFICATION = new Step("Verifying a transaction.");
+        private static final Step SIGS_GATHERING = new Step("Gathering a transaction's signatures.") {
+            // Wiring up a child progress tracker allows us to see the
+            // subflow's progress steps in our flow's progress tracker.
+            @Override
+            public ProgressTracker childProgressTracker() {
+                return CollectSignaturesFlow.tracker();
+            }
+        };
+        private static final Step VERIFYING_SIGS = new Step("Verifying a transaction's signatures.");
+        private static final Step FINALISATION = new Step("Finalising a transaction.") {
+            @Override
+            public ProgressTracker childProgressTracker() {
+                return FinalityFlow.tracker();
+            }
+        };
+        private final ProgressTracker progressTracker = new ProgressTracker(
+                ID_OTHER_NODES,
+                SENDING_AND_RECEIVING_DATA,
+                EXTRACTING_VAULT_STATES,
+                OTHER_TX_COMPONENTS,
+                TX_BUILDING,
+                TX_SIGNING,
+                TX_VERIFICATION,
+                SIGS_GATHERING,
+                FINALISATION);
+        public Initiator(Party otherParty) {
             this.otherParty = otherParty;
         }
+
 
         @Override
         public ProgressTracker getProgressTracker() {
@@ -65,41 +90,65 @@ public class AgreementNegotiationAgreeFlow {
         @Suspendable
         @Override public SignedTransaction call() throws FlowException{
 
-            // We retrieve the notary identity from the network map.
-            final Party notary = getServiceHub().getNetworkMapCache().getNotaryIdentities().get(0);
+            try {
+                progressTracker.setCurrentStep(ID_OTHER_NODES);
 
-            // We create a transaction builder.
-            final TransactionBuilder txBuilder = new TransactionBuilder();
-            txBuilder.setNotary(notary);
+                // We retrieve the notary identity from the network map.
+                final Party notary = getServiceHub().getNetworkMapCache().getNotaryIdentities().get(0);
 
-            // We create the transaction components.
-            AgreementNegotiationState outputState = new AgreementNegotiationState("name", new Date(),11.1,
-                    "collateral", getOurIdentity(), otherParty);
-            String outputContract = AgreementNegotiationContract.class.getName();
-            StateAndContract outputContractAndState = new StateAndContract(outputState, outputContract);
-            List<PublicKey> requiredSigners = ImmutableList.of(getOurIdentity().getOwningKey(), otherParty.getOwningKey());
-            Command cmd = new Command<>(new AgreementNegotiationContract.Commands.Initiate(), requiredSigners);
+                progressTracker.setCurrentStep(EXTRACTING_VAULT_STATES);
+                QueryCriteria criteria = new QueryCriteria.VaultQueryCriteria(Vault.StateStatus.UNCONSUMED);
+                //TODO Change the field (agrementName) name with unique field name and "test" with value in new ioustate
+                Field uniqueAttributeName = AgreementNegotiationSchema.PersistentIOU.class.getDeclaredField("agrementName");
+                CriteriaExpression uniqueAttributeEXpression = Builder.equal(uniqueAttributeName, "test");
+                QueryCriteria customCriteria = new QueryCriteria.VaultCustomQueryCriteria(uniqueAttributeEXpression);
 
+                QueryCriteria finalCriteria = criteria.and(customCriteria);
 
-            // We add the items to the builder.
-            txBuilder.withItems(outputContractAndState, cmd);
+                Vault.Page<AgreementNegotiationState> results = getServiceHub().getVaultService().
+                        queryBy(AgreementNegotiationState.class, finalCriteria);
 
-            // Verifying the transaction.
-            txBuilder.verify(getServiceHub());
+                List<StateAndRef<AgreementNegotiationState>> previousStates = results.getStates();
+                StateAndRef<AgreementNegotiationState>  previousStatesAndRef= previousStates.get(0);
+                AgreementNegotiationState previousState= previousStatesAndRef.getState().getData();
 
-            // Signing the transaction.
-            final SignedTransaction signedTx = getServiceHub().signInitialTransaction(txBuilder);
+                progressTracker.setCurrentStep(TX_BUILDING);
+                // We create a transaction builder.
+                final TransactionBuilder txBuilder = new TransactionBuilder();
+                txBuilder.setNotary(notary);
 
-            /// Creating a session with the other party.
-            FlowSession otherpartySession = initiateFlow(otherParty);
+                progressTracker.setCurrentStep(OTHER_TX_COMPONENTS);
+                // We create the transaction components.
+                List<PublicKey> requiredSigners = ImmutableList.of(otherParty.getOwningKey(), previousState.getCptyInitiator().getOwningKey());
+                Command cmd = new Command<>(new AgreementNegotiationContract.Commands.Agree(), requiredSigners);
 
-            // Obtaining the counterparty's signature.
-            SignedTransaction fullySignedTx = subFlow(new CollectSignaturesFlow(
-                    signedTx, ImmutableList.of(otherpartySession), CollectSignaturesFlow.tracker()));
+                // We add the items to the builder.
+                txBuilder.addInputState(previousStatesAndRef);
+                txBuilder.addCommand(cmd);
 
-            // Finalising the transaction.
-            return subFlow(new FinalityFlow(signedTx));
+                progressTracker.setCurrentStep(TX_SIGNING);
+                // Signing the transaction.
+                final SignedTransaction signedTx = getServiceHub().signInitialTransaction(txBuilder);
 
+                SignedTransaction twiceSignedTx = getServiceHub().addSignature(signedTx);
+
+                /// Creating a session with the other party.
+                FlowSession otherPartySession = initiateFlow(previousState.getCptyInitiator());
+
+                progressTracker.setCurrentStep(SIGS_GATHERING);
+                // Obtaining the counterparty's signature.
+                SignedTransaction fullySignedTx = subFlow(new CollectSignaturesFlow(
+                        twiceSignedTx, ImmutableList.of(otherPartySession), SIGS_GATHERING.childProgressTracker()));
+
+                progressTracker.setCurrentStep(FINALISATION);
+
+                // Finalising the transaction.
+                return subFlow(new FinalityFlow(fullySignedTx));
+            } catch (Exception ex) {
+                System.out.println("Exception"+ex.toString());
+                ex.printStackTrace();
+            }
+            return null;
         }
     }
 

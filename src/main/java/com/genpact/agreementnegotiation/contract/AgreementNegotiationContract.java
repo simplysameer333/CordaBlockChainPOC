@@ -12,16 +12,14 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import static net.corda.core.contracts.ContractsDSL.requireSingleCommand;
 import static net.corda.core.contracts.ContractsDSL.requireThat;
+
 /**
  * Define your contract here.
  */
 public class AgreementNegotiationContract implements Contract {
     // This is used to identify our contract when building a transaction.
     public static final String TEMPLATE_CONTRACT_ID = "AgreementNegotiationContract";
-
-
 
     public interface Commands extends CommandData {
         class Initiate implements Commands {
@@ -37,12 +35,19 @@ public class AgreementNegotiationContract implements Contract {
                 return obj instanceof Amend;
             }
         }
+
+        class Agree implements Commands {
+            @Override
+            public boolean equals(Object obj) {
+                return obj instanceof Agree;
+            }
+        }
     }
 
 
-
     // Our Create command.
-   // public static class Initiate implements CommandData {}
+    // public static class Initiate implements CommandData {}
+
     /**
      * A transaction is considered valid if the verify() function of the contract of each of the transaction's input
      * and output states does not throw an exception.
@@ -57,33 +62,38 @@ public class AgreementNegotiationContract implements Contract {
         final CommandWithParties<CommandData> command = onlyElementOf(commands);
 
         if (command.getValue() instanceof Commands.Initiate) {
-                requireThat(check -> {
-                    // Constraints on the shape of the transaction.
-                    check.using("No inputs should be consumed when issuing an IOU.", tx.getInputs().isEmpty());
-                    check.using("There should be one output state of type AgreementNegotiationState.", tx.getOutputs().size() == 1);
+            requireThat(check -> {
+                // Constraints on the shape of the transaction.
+                check.using("No inputs should be consumed when issuing an IOU.", tx.getInputs().isEmpty());
+                check.using("There should be one output state of type AgreementNegotiationState.", tx.getOutputs().size() == 1);
 
-                    // IOU-specific constraints.
-                    final AgreementNegotiationState out = (AgreementNegotiationState) tx.getOutputs().get(0).getData();
-                    final Party cptyA = out.getCptyInitiator();
-                    final Party cptyB = out.getCptyReciever();
-                    //   check.using("The Agreement Parameters's value must be Initialized.",out.getValue().isInitialized()==true);
-                    check.using("The Initiator and the Reciever cannot be the same entity.", cptyA != cptyB);
+                // IOU-specific constraints.
+                final AgreementNegotiationState out = (AgreementNegotiationState) tx.getOutputs().get(0).getData();
+                final Party cptyA = out.getCptyInitiator();
+                final Party cptyB = out.getCptyReciever();
+                //   check.using("The Agreement Parameters's value must be Initialized.",out.getValue().isInitialized()==true);
+                check.using("The Initiator and the Reciever cannot be the same entity.", cptyA != cptyB);
 
-                    // Constraints on the signers.
-                    check.using("There must only be two signer.", command.getSigners().size() == 2);
-                    check.using("The signer must be the cptyA.",  command.getSigners().containsAll(
-                            ImmutableList.of(cptyA.getOwningKey(), cptyB.getOwningKey())));
+                // Constraints on the signers.
+                check.using("There must only be two signer.", command.getSigners().size() == 2);
+                check.using("The signer must be the cptyA.", command.getSigners().containsAll(
+                        ImmutableList.of(cptyA.getOwningKey(), cptyB.getOwningKey())));
 
-                    return null;
-                });
-            }
-            else if (command.getValue() instanceof Commands.Amend) {
+                return null;
+            });
+        } else if (command.getValue() instanceof Commands.Amend) {
 
-                requireThat(require -> {
+            requireThat(require -> {
 
-                    return null;
-                });
-            }
+                return null;
+            });
+        } else if (command.getValue() instanceof Commands.Agree) {
+
+            requireThat(require -> {
+
+                return null;
+            });
+        }
     }
 
     private static <T> T onlyElementOf(Iterable<T> iterable) {

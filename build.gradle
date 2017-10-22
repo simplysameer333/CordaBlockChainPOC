@@ -101,7 +101,8 @@ task deployNodes(type: net.corda.plugins.Cordform, dependsOn: ['jar']) {
         rpcPort 10006
         webPort 10007
         cordapps = ["net.corda:corda-finance:$corda_release_version"]
-        rpcUsers = [[ user: "user1", "password": "test", "permissions": []]]
+        rpcUsers = [[ user: "user1", "password": "test", "permissions": ["StartFlow.com.genpact.agreementnegotiation.flow.AgreementNegotiationInitiateFlow\$Initiator"]]]
+	
     }
     node {
         name "O=PartyB,L=New York,C=US"
@@ -110,7 +111,17 @@ task deployNodes(type: net.corda.plugins.Cordform, dependsOn: ['jar']) {
         rpcPort 10009
         webPort 10010
         cordapps = ["net.corda:corda-finance:$corda_release_version"]
-        rpcUsers = [[ user: "user1", "password": "test", "permissions": []]]
+        rpcUsers = [[ user: "user1", "password": "test", "permissions": ["StartFlow.com.genpact.agreementnegotiation.flow.AgreementNegotiationInitiateFlow\$Initiator"]]]
+	
+    }
+    node {
+        name "O=PartyC,L=New Delhi,C=IN"
+        advertisedServices = []
+        p2pPort 10011
+        rpcPort 10012
+        webPort 10013
+        cordapps = ["net.corda:corda-finance:$corda_release_version"]
+        rpcUsers = [[ user: "user1", "password": "test", "permissions": ["StartFlow.com.genpact.agreementnegotiation.flow.AgreementNegotiationInitiateFlow\$Initiator"]]]
     }
 }
 

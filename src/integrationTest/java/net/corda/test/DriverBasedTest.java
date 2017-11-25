@@ -1,14 +1,12 @@
 package net.corda.test;
 
 import com.genpact.agreementnegotiation.flow.AgreementNegotiationInitiateFlow;
-import com.genpact.agreementnegotiation.state.AgreementNegotiationState;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Sets;
 import net.corda.core.concurrent.CordaFuture;
 import net.corda.core.identity.Party;
 import net.corda.core.messaging.FlowProgressHandle;
 import net.corda.core.transactions.SignedTransaction;
-import net.corda.node.services.transactions.SimpleNotaryService;
 import net.corda.node.services.transactions.ValidatingNotaryService;
 import net.corda.nodeapi.internal.ServiceInfo;
 import net.corda.testing.driver.DriverParameters;

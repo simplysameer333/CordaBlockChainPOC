@@ -36,6 +36,7 @@ public class Main {
         Set<String> permissions = new HashSet<String>();
         permissions.add("StartFlow.com.genpact.agreementnegotiation.flow.AgreementNegotiationInitiateFlow$Initiator");
         permissions.add("StartFlow.com.genpact.agreementnegotiation.flow.AgreementNegotiationAmendFlow$Initiator");
+        permissions.add("StartFlow.com.genpact.agreementnegotiation.flow.AgreementNegotiationAcceptFlow$Initiator");
         final User user = new User("user1", "test", permissions );
         driver(new DriverParameters().setIsDebug(true), dsl -> {
                     dsl.startNode(new NodeParameters()

@@ -3,6 +3,7 @@ package com.genpact.agreementnegotiation.flow;
 import co.paralleluniverse.fibers.Suspendable;
 import com.genpact.agreementnegotiation.contract.AgreementNegotiationContract;
 import com.genpact.agreementnegotiation.schema.AgreementNegotiationSchema;
+import com.genpact.agreementnegotiation.state.AgreementEnumState;
 import com.genpact.agreementnegotiation.state.AgreementNegotiationState;
 import com.google.common.collect.ImmutableList;
 import net.corda.core.contracts.Command;
@@ -35,13 +36,10 @@ public class AgreementNegotiationAmendFlow {
     @InitiatingFlow
     @StartableByRPC
     public static class Initiator extends FlowLogic<SignedTransaction> {
-        private final Party otherParty;
         private final AgreementNegotiationState agreementNegotiationState;
 
-        public Initiator(AgreementNegotiationState state, Party otherParty) {
-
+        public Initiator(AgreementNegotiationState state) {
             this.agreementNegotiationState = state;
-            this.otherParty = otherParty;
         }
 
         /**
@@ -118,29 +116,27 @@ public class AgreementNegotiationAmendFlow {
                 }
                 StateAndRef<AgreementNegotiationState>  previousStatesAndRef= previousStates.get(0);
                 AgreementNegotiationState previousState= previousStatesAndRef.getState().getData();
+                System.out.println("================================> previousState "+ previousState.toString());
 
-                progressTracker.setCurrentStep(TX_BUILDING);
                 // We create a transaction builder.
+                progressTracker.setCurrentStep(TX_BUILDING);
                 final TransactionBuilder txBuilder = new TransactionBuilder();
                 txBuilder.setNotary(notary);
 
-                progressTracker.setCurrentStep(OTHER_TX_COMPONENTS);
                 // We create the transaction components.
-                agreementNegotiationState.setAgrementInitiationDate(previousState.getInitiateDate());
-                agreementNegotiationState.setCptyReciever(previousState.getCptyReciever());
-                agreementNegotiationState.setCptyInitiator(previousState.getCptyInitiator());
+                progressTracker.setCurrentStep(OTHER_TX_COMPONENTS);
+                //AgreementUtil.copyAllFields(agreementNegotiationState, previousState);
                 agreementNegotiationState.setLinearId(previousState.getLinearId());
+                agreementNegotiationState.setStatus(AgreementEnumState.AMEND);
                 agreementNegotiationState.setAgrementLastAmendDate(new Date());
                 agreementNegotiationState.setLastUpdatedBy(getOurIdentity());
-
-                agreementNegotiationState.setNegotiationState(AgreementNegotiationState.NegotiationStates.AMEND);
-
-                //agreementNegotiationState.setAgrementLastAmendDate(new Date());
-                //agreementNegotiationState.setLastUpdatedBy(otherParty);
-
+                agreementNegotiationState.setAgrementName(previousState.getAgrementName());
+                agreementNegotiationState.setAgrementInitiationDate(previousState.getAgrementInitiationDateAsDate());
+                agreementNegotiationState.setCptyInitiator(previousState.getCptyInitiator());
+                agreementNegotiationState.setCptyReciever(previousState.getCptyReciever());
 
                 String outputContract = AgreementNegotiationContract.class.getName();
-                List<PublicKey> requiredSigners = ImmutableList.of(otherParty.getOwningKey(), previousState.getCptyInitiator().getOwningKey());
+                List<PublicKey> requiredSigners = ImmutableList.of(previousState.getCptyReciever().getOwningKey(), previousState.getCptyInitiator().getOwningKey());
                 Command cmd = new Command<>(new AgreementNegotiationContract.Commands.Amend(), requiredSigners);
 
                 // We add the items to the builder.
@@ -148,25 +144,30 @@ public class AgreementNegotiationAmendFlow {
                 txBuilder.addInputState(previousStatesAndRef);
                 txBuilder.addCommand(cmd);
 
+                // Verifying the transaction.
                 progressTracker.setCurrentStep(TX_VERIFICATION);
+                txBuilder.verify(getServiceHub());
 
-                progressTracker.setCurrentStep(TX_SIGNING);
                 // Signing the transaction.
+                progressTracker.setCurrentStep(TX_SIGNING);
                 final SignedTransaction signedTx = getServiceHub().signInitialTransaction(txBuilder);
-
                 SignedTransaction twiceSignedTx = getServiceHub().addSignature(signedTx);
 
-                /// Creating a session with the other party.
-                FlowSession otherPartySession = initiateFlow(previousState.getCptyInitiator());
+                // Creating a session with the other party.
+                Party counterParty = previousState.getCptyReciever();
+                if (counterParty.getName().equals(getOurIdentity().getName())) {
+                    counterParty = previousState.getCptyInitiator();
+                }
+                FlowSession otherPartySession = initiateFlow(counterParty);
 
                 progressTracker.setCurrentStep(SIGS_GATHERING);
                 // Obtaining the counterparty's signature.
                 SignedTransaction fullySignedTx = subFlow(new CollectSignaturesFlow(
                         twiceSignedTx, ImmutableList.of(otherPartySession), SIGS_GATHERING.childProgressTracker()));
 
-                 progressTracker.setCurrentStep(FINALISATION);
+                progressTracker.setCurrentStep(FINALISATION);
 
-                 // Finalising the transaction.
+                // Finalising the transaction.
                 return subFlow(new FinalityFlow(fullySignedTx));
             } catch (Exception ex) {
                 System.out.println("Exception"+ex.toString());

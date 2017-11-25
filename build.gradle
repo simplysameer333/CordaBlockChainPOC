@@ -73,6 +73,8 @@ dependencies {
     // Specify your CorDapp's dependencies below, including dependent CorDapps.
     // We've defined Cash as a dependent CorDapp as an example.
     cordapp "net.corda:corda-finance:$corda_release_version"
+
+    compile "org.apache.commons:commons-lang3:3.6"
 }
 
 task integrationTest(type: Test, dependsOn: []) {
